@@ -1,47 +1,69 @@
-# Baseer | بصير  
-Smart Waste Monitoring and Collection System  
+# **Baseer | بصير**
+### **Smart Waste Monitoring and Collection System**
 
-## Introduction  
-Baseer (بصير) is a smart waste monitoring and collection system designed to optimize urban waste management in Riyadh.  
-The device uses IoT-enabled ultrasonic sensors installed in trash bins to monitor fill levels in real time.  
-Data is transmitted to a cloud-based platform, where collection truck drivers and administrators can access insights through a mobile application.  
+Baseer (بصير) is a smart waste monitoring and collection system designed to improve the efficiency of urban waste management in Riyadh.  
+The system uses IoT-enabled ultrasonic sensors to measure bin fill levels in real time, with data transmitted to a cloud platform and displayed in a Flutter mobile application used by drivers and administrators.
 
-**Goal:** Increase efficiency of waste collection by reducing unnecessary trips, lowering operational costs, and ensuring cleaner streets.  
+---
 
-**Benefits:** Faster collection, less overflow, reduced odors and pests, and improved decision-making using data.  
+## **Overview**
 
-## Technology  
+### **Goal**
+Increase efficiency of waste collection by reducing unnecessary trips, lowering operational costs, and ensuring cleaner streets.
 
-- **Programming:**  
-  - Arduino IDE (ESP32 microcontroller)  
-  - Flutter (mobile application for drivers/admins)  
+### **Key Benefits**
+- Faster and more responsive waste collection  
+- Reduced bin overflow  
+- Less odor and fewer pests  
+- Lower fuel and labor costs  
+- Improved decision-making through real-time data  
 
-- **Hardware:**  
-  - ESP32 microcontroller with Wi-Fi/Bluetooth  
-  - JSN-SR04T ultrasonic sensor (for bin fill-level)  
-  - Breadboard, jumper wires, USB power module for prototyping  
+---
 
-- **Cloud & Database:**  
-  - Firebase Realtime Database for data synchronization  
+## **System Architecture**
+Baseer consists of three integrated components:
 
-- **API:**  
-  - Google Maps API for optimized routing  
+1. **IoT Hardware** – ESP32 + JSN-SR04T ultrasonic sensor  
+2. **Cloud Backend** – Firebase Realtime Database  
+3. **Mobile Application** – Flutter app for drivers and administrators  
 
-## Launching Instructions  
+---
 
-1. **Hardware Setup:**  
-   - Connect ESP32 microcontroller to JSN-SR04T ultrasonic sensor via breadboard and jumper wires.  
-   - Upload ESP32 program using Arduino IDE.  
+## **Technology Stack**
 
-2. **Cloud Integration:**  
-   - Configure Firebase Realtime Database.  
-   - Ensure ESP32 sends sensor readings to Firebase.  
+### **Programming**
+- Arduino IDE (ESP32 firmware)  
+- Flutter (cross-platform mobile application)
 
-3. **Mobile App:**  
-   - Clone the Flutter app code.  
-   - Run `flutter pub get` to install dependencies.  
-   - Launch the app on Android/iOS with `flutter run`.  
+### **Hardware**
+- ESP32 Development Board  
+- **JSN-SR04T Ultrasonic Sensor** (waterproof)  
+- Breadboard  
+- Jumper Wires  
+- USB Power Module (for prototyping)
 
-4. **Usage:**  
-   - **Drivers:** View bin fill levels and follow optimized routes.  
-   - **Admins:** Monitor bin status city-wide and track collection activity.  
+### **Cloud & Database**
+- **Firebase Realtime Database** for live sensor data synchronization
+
+### **APIs**
+- **Google Maps API** for mapping and navigation
+
+---
+
+## **Launching Instructions**
+
+### **1. Hardware Setup**
+- Connect the **ESP32** to the **JSN-SR04T** sensor using a breadboard and jumper wires.  
+- Verify correct VCC, GND, Trig, and Echo wiring.  
+- Upload the Arduino code using the **Arduino IDE**.  
+- Confirm sensor readings via the Serial Monitor.
+
+### **2. Cloud Integration**
+- Create a Firebase project and enable **Realtime Database**.  
+- Add Firebase API key + DB URL to the ESP32 code.  
+- Check that readings appear in Firebase under `/bins`.
+
+### **3. Mobile App Setup**
+Clone the repository:
+```bash
+git clone <repo-link>
