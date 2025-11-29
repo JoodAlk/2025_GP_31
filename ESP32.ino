@@ -5,8 +5,8 @@
 #include <time.h>
 
 // ===== Wi-Fi =====
-#define WIFI_SSID     "HUAWEI-B525-7260"
-#define WIFI_PASSWORD "58658593"
+#define WIFI_SSID     "Name"
+#define WIFI_PASSWORD "Password"
 
 // ===== Firebase (RTDB) =====
 #define API_KEY      "AIzaSyBgzhlooyfDirhNsYww63URZfMhhl2DDhE"
