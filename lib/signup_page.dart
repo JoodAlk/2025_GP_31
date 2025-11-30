@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
-import 'login_page.dart'; // <--- Added to allow navigation back
+import 'login_page.dart';
 
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
@@ -23,6 +23,13 @@ class _SignUpPageState extends State<SignUpPage>
 
   bool _obscurePassword = true;
 
+  // Password Rule Status
+  bool hasUpper = false;
+  bool hasLower = false;
+  bool hasNumber = false;
+  bool hasSpecial = false;
+  bool hasLength = false;
+
   @override
   void initState() {
     super.initState();
@@ -32,12 +39,10 @@ class _SignUpPageState extends State<SignUpPage>
       duration: const Duration(milliseconds: 700),
     );
 
-    _fade = CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOut,
-    );
-
+    _fade = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
     _controller.forward();
+
+    passwordController.addListener(updatePasswordRules);
   }
 
   @override
@@ -49,7 +54,20 @@ class _SignUpPageState extends State<SignUpPage>
     super.dispose();
   }
 
-  // ----------- HELPERS: Show Popup ----------
+  // ---------------- PASSWORD RULE CHECKER ----------------
+  void updatePasswordRules() {
+    String pass = passwordController.text;
+
+    setState(() {
+      hasUpper = RegExp(r'[A-Z]').hasMatch(pass);
+      hasLower = RegExp(r'[a-z]').hasMatch(pass);
+      hasNumber = RegExp(r'[0-9]').hasMatch(pass);
+      hasSpecial = RegExp(r'[!@#\$%^&*(),.?":{}|<>]').hasMatch(pass);
+      hasLength = pass.length >= 8;
+    });
+  }
+
+  // Show Popup
   void showPopup(String title, String message) {
     showDialog(
       context: context,
@@ -66,32 +84,23 @@ class _SignUpPageState extends State<SignUpPage>
     );
   }
 
-  // ----------- HASH PASSWORD ----------
+  // Hash Password
   String hashPassword(String password) {
     final bytes = utf8.encode(password);
     return sha256.convert(bytes).toString();
   }
 
-  // ----------- PASSWORD VALIDATION ----------
-  bool isPasswordValid(String password) {
-    final upper = RegExp(r'[A-Z]');
-    final lower = RegExp(r'[a-z]');
-    final number = RegExp(r'[0-9]');
-    final special = RegExp(r'[!@#\$%^&*(),.?":{}|<>]');
-
-    return password.length >= 8 &&
-        upper.hasMatch(password) &&
-        lower.hasMatch(password) &&
-        number.hasMatch(password) &&
-        special.hasMatch(password);
+  // Password overall validation
+  bool isPasswordValid() {
+    return hasUpper && hasLower && hasNumber && hasSpecial && hasLength;
   }
 
-  // ----------- PHONE VALIDATION (Saudi) ----------
+  // Saudi phone validation (+9665XXXXXXXX)
   bool isPhoneValid(String phone) {
     return RegExp(r'^\+9665[0-9]{8}$').hasMatch(phone);
   }
 
-  // ----------- SIGN UP FUNCTION ----------
+  // --------------------- CREATE ACCOUNT ---------------------
   Future<void> createAccount() async {
     final name = nameController.text.trim();
     String phone = phoneController.text.trim();
@@ -102,30 +111,18 @@ class _SignUpPageState extends State<SignUpPage>
       return;
     }
 
-    if (!phone.startsWith("+966")) {
-      if (phone.startsWith("5")) {
-        phone = "+966$phone";
-      } else {
-        showPopup("Invalid Phone", "Phone number must start with 5 or +9665.");
-        return;
-      }
+    // Convert to +9665XXXXXXX
+    if (phone.startsWith("5")) {
+      phone = "+966$phone";
     }
 
     if (!isPhoneValid(phone)) {
-      showPopup("Invalid Phone Number",
-          "Enter a valid Saudi phone number:\n\n+9665XXXXXXXX");
+      showPopup("Invalid Phone", "Enter a valid Saudi number: 5XXXXXXXX");
       return;
     }
 
-    if (!isPasswordValid(password)) {
-      showPopup(
-        "Weak Password",
-        "Password must contain:\n"
-            "• At least 8 characters\n"
-            "• Upper & lower case letters\n"
-            "• A number\n"
-            "• A special character",
-      );
+    if (!isPasswordValid()) {
+      showPopup("Weak Password", "Please meet all password requirements.");
       return;
     }
 
@@ -148,7 +145,6 @@ class _SignUpPageState extends State<SignUpPage>
       "CurrentLocation": "",
     });
 
-    // SUCCESS POPUP
     if (mounted) {
       showDialog(
         context: context,
@@ -158,11 +154,11 @@ class _SignUpPageState extends State<SignUpPage>
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.pop(context); // Close popup
+                Navigator.pop(context);
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(builder: (_) => const LoginPage()),
-                ); // Go to Login Page
+                );
               },
               child: const Text("OK"),
             )
@@ -172,21 +168,31 @@ class _SignUpPageState extends State<SignUpPage>
     }
   }
 
+  // ---------------------- UI -------------------------
+  Widget buildRule(bool condition, String text) {
+    return Row(
+      children: [
+        Icon(
+          condition ? Icons.check_circle : Icons.cancel,
+          color: condition ? Colors.green : Colors.red,
+          size: 16,
+        ),
+        const SizedBox(width: 6),
+        Text(text, style: const TextStyle(fontSize: 12)),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Stack(
         children: [
           Positioned.fill(
-            child: Image.asset(
-              'assets/login.png',
-              fit: BoxFit.cover,
-            ),
+            child: Image.asset('assets/login.png', fit: BoxFit.cover),
           ),
           Positioned.fill(
-            child: Container(
-              color: Colors.black.withOpacity(0.35),
-            ),
+            child: Container(color: Colors.black.withOpacity(0.35)),
           ),
           Center(
             child: FadeTransition(
@@ -212,22 +218,17 @@ class _SignUpPageState extends State<SignUpPage>
                   children: [
                     SizedBox(
                       height: 90,
-                      child: Image.asset(
-                        'assets/Logo.png',
-                        fit: BoxFit.contain,
-                      ),
+                      child: Image.asset('assets/Logo.png'),
                     ),
                     const SizedBox(height: 20),
 
                     const Text(
                       "Driver Sign Up",
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 20),
 
+                    // NAME
                     TextField(
                       controller: nameController,
                       decoration: InputDecoration(
@@ -239,12 +240,13 @@ class _SignUpPageState extends State<SignUpPage>
                     ),
                     const SizedBox(height: 14),
 
+                    // PHONE
                     TextField(
                       controller: phoneController,
                       keyboardType: TextInputType.phone,
                       decoration: InputDecoration(
                         labelText: "Phone Number",
-                        hintText: "+9665XXXXXXXX",
+                        hintText: "5XXXXXXXX",
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -252,7 +254,7 @@ class _SignUpPageState extends State<SignUpPage>
                     ),
                     const SizedBox(height: 14),
 
-                    // Password + Eye icon
+                    // PASSWORD
                     TextField(
                       controller: passwordController,
                       obscureText: _obscurePassword,
@@ -262,11 +264,9 @@ class _SignUpPageState extends State<SignUpPage>
                           borderRadius: BorderRadius.circular(12),
                         ),
                         suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscurePassword
-                                ? Icons.visibility_off
-                                : Icons.visibility,
-                          ),
+                          icon: Icon(_obscurePassword
+                              ? Icons.visibility_off
+                              : Icons.visibility),
                           onPressed: () {
                             setState(() {
                               _obscurePassword = !_obscurePassword;
@@ -275,8 +275,19 @@ class _SignUpPageState extends State<SignUpPage>
                         ),
                       ),
                     ),
+
+                    const SizedBox(height: 10),
+
+                    // LIVE RULE CHECKMARKS
+                    buildRule(hasLength, "At least 8 characters"),
+                    buildRule(hasUpper, "Uppercase letter"),
+                    buildRule(hasLower, "Lowercase letter"),
+                    buildRule(hasNumber, "Number"),
+                    buildRule(hasSpecial, "Special character"),
+
                     const SizedBox(height: 20),
 
+                    // SUBMIT BUTTON
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
@@ -286,7 +297,6 @@ class _SignUpPageState extends State<SignUpPage>
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          elevation: 4,
                         ),
                         onPressed: createAccount,
                         child: const Text(
@@ -296,15 +306,12 @@ class _SignUpPageState extends State<SignUpPage>
                       ),
                     ),
 
-                    // --- NEW SECTION: LINK TO LOG IN ---
                     const SizedBox(height: 18),
-                    
+
                     GestureDetector(
                       onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => const LoginPage()),
-                        );
+                        Navigator.push(context,
+                          MaterialPageRoute(builder: (_) => const LoginPage()));
                       },
                       child: RichText(
                         text: const TextSpan(
@@ -323,7 +330,6 @@ class _SignUpPageState extends State<SignUpPage>
                         ),
                       ),
                     ),
-                    // -----------------------------------
                   ],
                 ),
               ),
