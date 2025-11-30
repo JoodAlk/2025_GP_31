@@ -142,6 +142,7 @@ class _SignUpPageState extends State<SignUpPage>
       "IsWorking": true,
       "Language": "en",
       "AssignedBinsId": "",
+      "AssignedArea": "",
       "CurrentLocation": "",
     });
 
