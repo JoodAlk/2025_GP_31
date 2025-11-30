@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'app_frame.dart'hide LoginPage; 
+import 'app_frame.dart' hide LoginPage; 
 import 'login_page.dart'; 
 import 'user_session.dart'; 
 
@@ -22,6 +22,7 @@ class DriverProfilePage extends StatelessWidget {
     switch (field) {
       case 'DriverID': return Icons.fingerprint;
       case 'Phone': return Icons.phone;
+      case 'Assigned Area': return Icons.location_on; // <--- Added Icon for Area
       case 'Employee No': return Icons.work;
       default: return Icons.info_outline;
     }
@@ -34,6 +35,9 @@ class DriverProfilePage extends StatelessWidget {
       'Name': UserSession.name.isNotEmpty ? UserSession.name : 'Guest',
       'DriverID': UserSession.driverId.isNotEmpty ? UserSession.driverId : 'N/A',
       'Phone': UserSession.phone.isNotEmpty ? UserSession.phone : 'N/A',
+      
+      // <--- ADDED: Assigned Area Field
+      'Assigned Area': UserSession.assignedArea.isNotEmpty ? UserSession.assignedArea : 'Riyadh-01',
     };
 
     return AppFrame(
