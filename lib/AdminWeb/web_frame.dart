@@ -60,30 +60,37 @@ class _WebFrameState extends State<WebFrame> {
                       right: 24, 
                       child: Container(
                         width: 280,
-                        height: 450,
+                        height: 380, // Slightly shorter since Role is removed
                         padding: const EdgeInsets.all(24),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF37474F), 
+                          color: const Color(0xFFE1F5FE), // CHANGED: Light Blue Background
                           borderRadius: BorderRadius.circular(16),
                           boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 15, offset: Offset(4, 4))],
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Center(
+                            Center(
                               child: Column(
                                 children: [
-                                  CircleAvatar(radius: 35, backgroundColor: Colors.white10, child: Icon(Icons.person, size: 40, color: Colors.white)),
-                                  SizedBox(height: 10),
-                                  Text("Admin Profile", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                  CircleAvatar(
+                                    radius: 35, 
+                                    backgroundColor: Colors.blue.shade200, 
+                                    child: const Icon(Icons.person, size: 40, color: Colors.white)
+                                  ),
+                                  const SizedBox(height: 10),
+                                  // CHANGED: Dark text for readability
+                                  const Text("Admin Profile", style: TextStyle(color: Color(0xFF263238), fontWeight: FontWeight.bold, fontSize: 16)),
                                 ],
                               ),
                             ),
-                            const Divider(color: Colors.white24, height: 30),
+                            const Divider(color: Colors.black12, height: 30),
+                            
+                            // CHANGED: Role is deleted
                             _buildProfileRow("ID", "A1"),
                             _buildProfileRow("Name", "Sarah Khaled"),
-                            _buildProfileRow("Role", "System Admin"),
                             _buildProfileRow("Email", "SarahKhaled@gmail.com"),
+                            
                             const Spacer(),
                             Row(
                               children: [
@@ -135,16 +142,12 @@ class _WebFrameState extends State<WebFrame> {
       ),
       child: Row(
         children: [
-          // LOGO SECTION: White background just for the left side
           Container(
             width: 180,
             height: double.infinity,
             decoration: const BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.only(
-                topRight: Radius.circular(40),
-                bottomRight: Radius.circular(40),
-              ),
+              borderRadius: BorderRadius.only(topRight: Radius.circular(40), bottomRight: Radius.circular(40)),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Image.asset(
@@ -154,7 +157,6 @@ class _WebFrameState extends State<WebFrame> {
             ),
           ),
           
-          // NAVIGATION BUTTONS
           Expanded(
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -177,8 +179,6 @@ class _WebFrameState extends State<WebFrame> {
               ],
             ),
           ),
-          
-          // Empty space to balance the logo width on the far right
           const SizedBox(width: 180), 
         ],
       ),
@@ -206,9 +206,11 @@ class _WebFrameState extends State<WebFrame> {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6.0),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text("$label: ", style: const TextStyle(color: Colors.white54, fontSize: 14)),
-          Expanded(child: Text(value, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500))),
+          // CHANGED: Label is dark grey, value is solid black for the light blue background
+          Text("$label: ", style: const TextStyle(color: Colors.black54, fontSize: 14)),
+          Expanded(child: Text(value, style: const TextStyle(color: Colors.black87, fontSize: 14, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
         ],
       ),
     );
