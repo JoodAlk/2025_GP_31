@@ -109,7 +109,6 @@ class _AdminDriverManagementState extends State<AdminDriverManagement> {
               "AssignedBinsId": "",
               "CurrentLocation": "",
               "AssignedArea": "None",
-              "Status": "Active",
             });
 
             await _sendSMSToDriver(phone, driverID, rawPassword);
