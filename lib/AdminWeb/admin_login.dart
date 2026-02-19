@@ -4,7 +4,8 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 
 import 'admin_homepage.dart';
-import 'admin_signup_page.dart';
+import 'admin_signup.dart';
+import 'admin_user_session.dart'; // IMPORT THE SESSION CLASS
 
 class AdminLoginPage extends StatefulWidget {
   const AdminLoginPage({super.key});
@@ -47,8 +48,13 @@ class _AdminLoginPageState extends State<AdminLoginPage> {
 
       final raw = adminsSnap.value;
       bool found = false;
+      
+      // Variables to temporarily hold the data of the matched admin
+      String? matchedDbKey;
+      Map<dynamic, dynamic>? matchedAdminData;
 
-      void tryLogin(dynamic admin) {
+      // Notice I added 'key' to this function to track the Firebase Node ID
+      void tryLogin(String key, dynamic admin) {
         if (admin == null || admin is! Map) return;
 
         final email = (admin['Email'] ?? '').toString().trim();
@@ -57,34 +63,43 @@ class _AdminLoginPageState extends State<AdminLoginPage> {
 
         String normalizedIdentifier = identifier;
 
-if (RegExp(r'^5\d{8}$').hasMatch(identifier)) {
-  normalizedIdentifier = "+966$identifier";
-}
+        if (RegExp(r'^5\d{8}$').hasMatch(identifier)) {
+          normalizedIdentifier = "+966$identifier";
+        }
 
-if ((normalizedIdentifier == email || normalizedIdentifier == phone) &&
-    storedPass == hashed) {
-
+        if ((normalizedIdentifier == email || normalizedIdentifier == phone) &&
+            storedPass == hashed) {
           found = true;
+          matchedDbKey = key;
+          matchedAdminData = admin;
         }
       }
 
       if (raw is List) {
-        for (final admin in raw) {
-          tryLogin(admin);
+        for (int i = 0; i < raw.length; i++) {
+          tryLogin(i.toString(), raw[i]);
           if (found) break;
         }
       } else if (raw is Map) {
-        final map = Map<dynamic, dynamic>.from(raw);
-        for (final admin in map.values) {
-          tryLogin(admin);
-          if (found) break;
-        }
+        raw.forEach((k, v) {
+          if (!found) tryLogin(k.toString(), v);
+        });
       }
 
       if (!found) {
         _showDialog("Login Failed", "Invalid credentials.");
         return;
       }
+
+      // --- SAVE TO SESSION ---
+      await AdminUserSession.saveSession(
+        dbKey: matchedDbKey!,
+        id: matchedAdminData?['AdminID'] ?? matchedDbKey, // Fallback if AdminID isn't set
+        name: matchedAdminData?['Name'] ?? 'Unknown Admin',
+        email: matchedAdminData?['Email'] ?? '',
+        phone: matchedAdminData?['Phone'] ?? '',
+        permissionKey: matchedAdminData?['PermissionKey'],
+      );
 
       if (!mounted) return;
       Navigator.pushReplacement(
@@ -105,7 +120,7 @@ if ((normalizedIdentifier == email || normalizedIdentifier == phone) &&
         children: [
           Positioned.fill(
             child: Image.asset(
-              "assets/images/Loginn.png",
+              "assets/loginn.png",
               fit: BoxFit.cover,
             ),
           ),
@@ -134,7 +149,7 @@ if ((normalizedIdentifier == email || normalizedIdentifier == phone) &&
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Image.asset("assets/images/Logo.png", height: 60),
+                      Image.asset("assets/logo.png", height: 60),
                       const SizedBox(height: 10),
                       const Text(
                         "Admin Login",
@@ -171,7 +186,6 @@ if ((normalizedIdentifier == email || normalizedIdentifier == phone) &&
 
                       const SizedBox(height: 20),
 
-                      // ✅ GREEN button + WHITE text (as you want)
                       SizedBox(
                         width: double.infinity,
                         height: 50,
