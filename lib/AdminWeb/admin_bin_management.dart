@@ -169,7 +169,7 @@ class _AdminBinManagementState extends State<AdminBinManagement> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text("Bin & Hardware Management", style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+                const Text("Bin Management", style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
                 ElevatedButton.icon(
                   onPressed: _showAddBinDialog,
                   icon: const Icon(Icons.add, color: Colors.white),
