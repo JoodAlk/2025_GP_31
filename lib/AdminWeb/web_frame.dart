@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_database/firebase_database.dart'; 
 import 'admin_homepage.dart';
 import 'admin_login.dart';
 import 'admin_bin_management.dart';
 import 'admin_map.dart';
 import 'admin_driver_management.dart';
+import 'admin_user_session.dart'; 
 
 class WebFrame extends StatefulWidget {
   final Widget body;
@@ -22,6 +24,32 @@ class WebFrame extends StatefulWidget {
 class _WebFrameState extends State<WebFrame> {
   bool _isProfileOpen = false;
 
+  // Session Data
+  String _dbKey = "";
+  String _adminId = "Loading...";
+  String _adminName = "Loading...";
+  String _adminEmail = "Loading...";
+  String _adminPhone = "Loading...";
+  String? _adminPermission;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSessionData();
+  }
+
+  Future<void> _loadSessionData() async {
+    final session = await AdminUserSession.getSession();
+    setState(() {
+      _dbKey = session['dbKey'] ?? "";
+      _adminId = session['id'] ?? "Unknown";
+      _adminName = session['name'] ?? "Unknown";
+      _adminEmail = session['email'] ?? "Unknown";
+      _adminPhone = session['phone'] ?? "Unknown";
+      _adminPermission = session['permissionKey'];
+    });
+  }
+
   void _navigate(BuildContext context, Widget page) {
     Navigator.pushReplacement(
       context,
@@ -29,6 +57,100 @@ class _WebFrameState extends State<WebFrame> {
         pageBuilder: (context, animation1, animation2) => page,
         transitionDuration: Duration.zero,
         reverseTransitionDuration: Duration.zero,
+      ),
+    );
+  }
+
+  // --- LOGOUT LOGIC ---
+  Future<void> _handleLogout() async {
+    await AdminUserSession.clearSession(); 
+    if (!mounted) return;
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (context) => const AdminLoginPage()),
+      (route) => false, 
+    );
+  }
+
+  // --- EDIT PROFILE DIALOG LOGIC ---
+  void _showEditProfileDialog() {
+    final nameCtrl = TextEditingController(text: _adminName);
+    final emailCtrl = TextEditingController(text: _adminEmail);
+    final phoneCtrl = TextEditingController(text: _adminPhone);
+    final permissionCtrl = TextEditingController(text: _adminPermission ?? "");
+
+    // Check if the admin currently has a permission key
+    bool hasPermissionKey = _adminPermission != null && _adminPermission!.isNotEmpty;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Edit Profile"),
+        content: SizedBox(
+          width: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: "Name")),
+              const SizedBox(height: 10),
+              TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: "Phone Number")),
+              const SizedBox(height: 10),
+              TextField(controller: emailCtrl, decoration: const InputDecoration(labelText: "Email Address")),
+              
+              // ONLY show this field if the admin already has a Permission Key
+              if (hasPermissionKey) ...[
+                const SizedBox(height: 10),
+                TextField(
+                  controller: permissionCtrl, 
+                  decoration: const InputDecoration(labelText: "Permission Key")
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF81C784)),
+            onPressed: () async {
+              
+              // 1. Update Firebase
+              final updateData = {
+                'Name': nameCtrl.text.trim(),
+                'Phone': phoneCtrl.text.trim(),
+                'Email': emailCtrl.text.trim(),
+              };
+              
+              String? newPermission;
+              // Only process permission key update if they are allowed to have it
+              if (hasPermissionKey) {
+                newPermission = permissionCtrl.text.trim();
+                if (newPermission.isNotEmpty) {
+                  updateData['PermissionKey'] = newPermission;
+                }
+              }
+
+              await FirebaseDatabase.instance.ref('Baseer/admins/$_dbKey').update(updateData);
+
+              // 2. Update local session & UI
+              await AdminUserSession.saveSession(
+                dbKey: _dbKey,
+                id: _adminId, 
+                name: nameCtrl.text.trim(),
+                email: emailCtrl.text.trim(),
+                phone: phoneCtrl.text.trim(),
+                permissionKey: hasPermissionKey ? newPermission : _adminPermission, 
+              );
+              
+              await _loadSessionData(); 
+
+              if (!mounted) return;
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Profile updated successfully!")));
+            },
+            child: const Text("Save Changes", style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
     );
   }
@@ -59,16 +181,16 @@ class _WebFrameState extends State<WebFrame> {
                       top: 90, 
                       right: 24, 
                       child: Container(
-                        width: 280,
-                        height: 380, // Slightly shorter since Role is removed
+                        width: 320,
                         padding: const EdgeInsets.all(24),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFE1F5FE), // CHANGED: Light Blue Background
+                          color: const Color(0xFFE1F5FE), 
                           borderRadius: BorderRadius.circular(16),
                           boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 15, offset: Offset(4, 4))],
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min, 
                           children: [
                             Center(
                               child: Column(
@@ -79,24 +201,26 @@ class _WebFrameState extends State<WebFrame> {
                                     child: const Icon(Icons.person, size: 40, color: Colors.white)
                                   ),
                                   const SizedBox(height: 10),
-                                  // CHANGED: Dark text for readability
                                   const Text("Admin Profile", style: TextStyle(color: Color(0xFF263238), fontWeight: FontWeight.bold, fontSize: 16)),
                                 ],
                               ),
                             ),
                             const Divider(color: Colors.black12, height: 30),
                             
-                            // CHANGED: Role is deleted
-                            _buildProfileRow("ID", "A1"),
-                            _buildProfileRow("Name", "Sarah Khaled"),
-                            _buildProfileRow("Email", "SarahKhaled@gmail.com"),
+                            _buildProfileRow("ID", _adminId),
+                            _buildProfileRow("Name", _adminName),
+                            _buildProfileRow("Phone", _adminPhone),
+                            _buildProfileRow("Email", _adminEmail),
                             
-                            const Spacer(),
+                            if (_adminPermission != null && _adminPermission!.isNotEmpty)
+                              _buildProfileRow("Key", _adminPermission!),
+                            
+                            const SizedBox(height: 20),
                             Row(
                               children: [
                                 Expanded(
                                   child: OutlinedButton(
-                                    onPressed: () {},
+                                    onPressed: _showEditProfileDialog, 
                                     style: OutlinedButton.styleFrom(
                                       foregroundColor: const Color(0xFF81C784), 
                                       side: const BorderSide(color: Color(0xFF81C784), width: 3.0),
@@ -107,13 +231,7 @@ class _WebFrameState extends State<WebFrame> {
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: ElevatedButton(
-                                    onPressed: () {
-                                      Navigator.pushAndRemoveUntil(
-                                        context,
-                                        MaterialPageRoute(builder: (context) => const AdminLoginPage()),
-                                        (route) => false, 
-                                      );
-                                    },
+                                    onPressed: _handleLogout, 
                                     style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
                                     child: const Text("Logout", style: TextStyle(color: Colors.white)),
                                   ),
@@ -208,7 +326,6 @@ class _WebFrameState extends State<WebFrame> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // CHANGED: Label is dark grey, value is solid black for the light blue background
           Text("$label: ", style: const TextStyle(color: Colors.black54, fontSize: 14)),
           Expanded(child: Text(value, style: const TextStyle(color: Colors.black87, fontSize: 14, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
         ],
