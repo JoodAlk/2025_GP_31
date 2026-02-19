@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
+
 import 'admin_homepage.dart';
+import 'admin_signup_page.dart';
 
 class AdminLoginPage extends StatefulWidget {
   const AdminLoginPage({super.key});
@@ -10,239 +14,241 @@ class AdminLoginPage extends StatefulWidget {
 }
 
 class _AdminLoginPageState extends State<AdminLoginPage> {
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
-  final DatabaseReference _dbRef = FirebaseDatabase.instance.ref('Baseer/admins');
-  
-  bool _isLoading = false;
+  final DatabaseReference _dbRef = FirebaseDatabase.instance.ref('Baseer');
+
+  final _formKey = GlobalKey<FormState>();
+
+  final TextEditingController identifierController = TextEditingController();
+  final TextEditingController passwordController = TextEditingController();
+
   bool _obscurePassword = true;
-  String _errorMessage = '';
+  bool _isLoading = false;
 
-  // Function to handle Firebase Login checking
-  Future<void> _handleLogin() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = '';
-    });
-
-    String inputEmail = _emailController.text.trim();
-    String inputPassword = _passwordController.text.trim();
-
-    if (inputEmail.isEmpty || inputPassword.isEmpty) {
-      setState(() {
-        _errorMessage = 'Please enter both email and password.';
-        _isLoading = false;
-      });
-      return;
-    }
-
-    try {
-      final snapshot = await _dbRef.get();
-
-      if (snapshot.exists) {
-        bool isAuthenticated = false;
-        final data = snapshot.value;
-
-        // Firebase sometimes returns arrays as Lists and sometimes as Maps if keys are missing
-        if (data is List) {
-          for (var admin in data) {
-            if (admin != null && admin is Map) {
-              if (admin['Email'] == inputEmail && admin['EmployeePass'] == inputPassword) {
-                isAuthenticated = true;
-                break;
-              }
-            }
-          }
-        } else if (data is Map) {
-          data.forEach((key, admin) {
-            if (admin != null && admin is Map) {
-              if (admin['Email'] == inputEmail && admin['EmployeePass'] == inputPassword) {
-                isAuthenticated = true;
-              }
-            }
-          });
-        }
-
-        if (isAuthenticated) {
-          // Success! Navigate to the Dashboard
-          if (!mounted) return;
-          Navigator.pushReplacement(
-            context,
-            PageRouteBuilder(
-              pageBuilder: (context, animation1, animation2) => const AdminHomePage(),
-              transitionDuration: Duration.zero,
-              reverseTransitionDuration: Duration.zero,
-            ),
-          );
-        } else {
-          setState(() {
-            _errorMessage = 'Invalid email or password. Please try again.';
-          });
-        }
-      } else {
-         setState(() {
-            _errorMessage = 'Admin records not found in database.';
-          });
-      }
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'Connection error: ${e.toString()}';
-      });
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
-    }
+  String _hashPassword(String password) {
+    return sha256.convert(utf8.encode(password)).toString();
   }
 
-  @override
-  void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
-    super.dispose();
+  Future<void> _login() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    final identifier = identifierController.text.trim();
+    final password = passwordController.text.trim();
+    final hashed = _hashPassword(password);
+
+    setState(() => _isLoading = true);
+
+    try {
+      final adminsSnap = await _dbRef.child("admins").get();
+
+      if (!adminsSnap.exists || adminsSnap.value == null) {
+        _showDialog("Error", "No admins found.");
+        return;
+      }
+
+      final raw = adminsSnap.value;
+      bool found = false;
+
+      void tryLogin(dynamic admin) {
+        if (admin == null || admin is! Map) return;
+
+        final email = (admin['Email'] ?? '').toString().trim();
+        final phone = (admin['Phone'] ?? '').toString().trim();
+        final storedPass = (admin['EmployeePass'] ?? '').toString().trim();
+
+        String normalizedIdentifier = identifier;
+
+if (RegExp(r'^5\d{8}$').hasMatch(identifier)) {
+  normalizedIdentifier = "+966$identifier";
+}
+
+if ((normalizedIdentifier == email || normalizedIdentifier == phone) &&
+    storedPass == hashed) {
+
+          found = true;
+        }
+      }
+
+      if (raw is List) {
+        for (final admin in raw) {
+          tryLogin(admin);
+          if (found) break;
+        }
+      } else if (raw is Map) {
+        final map = Map<dynamic, dynamic>.from(raw);
+        for (final admin in map.values) {
+          tryLogin(admin);
+          if (found) break;
+        }
+      }
+
+      if (!found) {
+        _showDialog("Login Failed", "Invalid credentials.");
+        return;
+      }
+
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const AdminHomePage()),
+      );
+    } catch (e) {
+      _showDialog("Error", e.toString());
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA), // Matches Dashboard background
-      body: Center(
-        child: SingleChildScrollView(
-          child: Container(
-            width: 450, // Fixed width for web card
-            padding: const EdgeInsets.all(40),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 20,
-                  spreadRadius: 5,
-                  offset: const Offset(0, 10),
-                )
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Logo
-                SizedBox(
-                  height: 100,
-                  child: Image.asset(
-                    'assets/Logo.png',
-                    fit: BoxFit.contain,
-                    errorBuilder: (context, error, stackTrace) => const Icon(
-                      Icons.admin_panel_settings,
-                      size: 80,
-                      color: Color(0xFF66BB6A),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                
-                // Welcome Text
-                const Text(
-                  "Welcome Back",
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF37474F),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  "Sign in to access the Baseer Control Panel",
-                  style: TextStyle(color: Colors.grey, fontSize: 14),
-                ),
-                const SizedBox(height: 40),
-
-                // Email Text Field
-                TextField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: InputDecoration(
-                    labelText: "Admin Email",
-                    prefixIcon: const Icon(Icons.email_outlined),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFF29B6F6), width: 2),
-                    ),
-                  ),
-                  onSubmitted: (_) => _handleLogin(),
-                ),
-                const SizedBox(height: 20),
-
-                // Password Text Field
-                TextField(
-                  controller: _passwordController,
-                  obscureText: _obscurePassword,
-                  decoration: InputDecoration(
-                    labelText: "Password",
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    suffixIcon: IconButton(
-                      icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
-                      onPressed: () {
-                        setState(() {
-                          _obscurePassword = !_obscurePassword;
-                        });
-                      },
-                    ),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFF29B6F6), width: 2),
-                    ),
-                  ),
-                  onSubmitted: (_) => _handleLogin(),
-                ),
-                const SizedBox(height: 12),
-
-                // Error Message Display
-                if (_errorMessage.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12.0),
-                    child: Text(
-                      _errorMessage,
-                      style: const TextStyle(color: Colors.redAccent, fontSize: 14),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-
-                const SizedBox(height: 10),
-
-                // Login Button
-                SizedBox(
-                  width: double.infinity,
-                  height: 55,
-                  child: ElevatedButton(
-                    onPressed: _isLoading ? null : _handleLogin,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF29B6F6), // Baby Blue matches your logo
-                      foregroundColor: Colors.white,
-                      elevation: 2,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: _isLoading
-                        ? const SizedBox(
-                            height: 24,
-                            width: 24,
-                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3),
-                          )
-                        : const Text(
-                            "Login to Dashboard",
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                          ),
-                  ),
-                ),
-              ],
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: Image.asset(
+              "assets/images/Loginn.png",
+              fit: BoxFit.cover,
             ),
           ),
-        ),
+          Positioned.fill(
+            child: Container(color: Colors.black.withOpacity(0.35)),
+          ),
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 500),
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                margin: const EdgeInsets.symmetric(horizontal: 20),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.92),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.15),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
+                    )
+                  ],
+                ),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Image.asset("assets/images/Logo.png", height: 60),
+                      const SizedBox(height: 10),
+                      const Text(
+                        "Admin Login",
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 20),
+
+                      TextFormField(
+                        controller: identifierController,
+                        decoration: InputDecoration(
+                          prefixIcon: const Icon(Icons.person_outline),
+                          labelText: "Email or Phone Number",
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        validator: (v) => (v == null || v.trim().isEmpty) ? "Required" : null,
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      TextFormField(
+                        controller: passwordController,
+                        obscureText: _obscurePassword,
+                        decoration: InputDecoration(
+                          prefixIcon: const Icon(Icons.lock_outline),
+                          labelText: "Password",
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          suffixIcon: IconButton(
+                            icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off),
+                            onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                          ),
+                        ),
+                        validator: (v) => (v == null || v.isEmpty) ? "Required" : null,
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      // ✅ GREEN button + WHITE text (as you want)
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF4CAF50),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            elevation: 0,
+                          ),
+                          onPressed: _isLoading ? null : _login,
+                          child: _isLoading
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Text(
+                                  "Login",
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Text("No admin account? "),
+                          TextButton(
+                            onPressed: () {
+                              Navigator.pushReplacement(
+                                context,
+                                MaterialPageRoute(builder: (_) => const AdminSignUpPage()),
+                              );
+                            },
+                            child: const Text("Sign up"),
+                          )
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
+  }
+
+  void _showDialog(String title, String message) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
+        ],
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    identifierController.dispose();
+    passwordController.dispose();
+    super.dispose();
   }
 }
