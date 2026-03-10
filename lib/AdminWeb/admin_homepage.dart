@@ -30,7 +30,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
     int count = 0;
     bins.forEach((k, v) {
       bool isUnassigned = v['IsAssigned'] == false;
-      // UPDATED: Critical threshold is now 75%
       bool isFull = v['IsOverflowing'] == true || (v['FillLevel'] ?? 0) >= 75;
       if (isUnassigned && isFull) count++;
     });
@@ -51,7 +50,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
     double empty = 0, half = 0, full = 0;
     bins.forEach((k, v) {
       int fill = v['FillLevel'] ?? 0;
-      // UPDATED: Critical threshold is now 75%
       if (fill < 50) empty++; else if (fill < 75) half++; else full++;
     });
     return {'Safe': empty, 'Warning': half, 'Critical': full};
@@ -64,7 +62,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
       int fill = (v['FillLevel'] ?? 0).toInt();
       areas.putIfAbsent(area, () => {'Safe': 0, 'Warning': 0, 'Critical': 0});
 
-      // UPDATED: Critical threshold is now 75%
       if (fill >= 75) {
         areas[area]!['Critical'] = areas[area]!['Critical']! + 1;
       } else if (fill >= 50) {
@@ -79,30 +76,26 @@ class _AdminHomePageState extends State<AdminHomePage> {
   List<Map<String, dynamic>> _generateAlerts(Map<dynamic, dynamic> bins) {
     List<Map<String, dynamic>> alerts = [];
     bins.forEach((k, v) {
-      // UPDATED: Critical threshold is now 75%
       bool isCritical = (v['FillLevel'] ?? 0) >= 75;
-      bool isOffline = v['Status'] != null && v['Status'].toString().toUpperCase() != 'OK';
       bool isOverflowing = v['IsOverflowing'] == true;
+      bool isFull = isCritical || isOverflowing;
       bool isUnassigned = v['IsAssigned'] == false;
+      bool isOffline = v['Status'] != null && v['Status'].toString().toUpperCase() != 'OK';
 
-      if (isCritical || isOffline || isOverflowing) {
+      // ONLY trigger alerts for Offline or (Full + Unassigned)
+      if (isOffline || (isFull && isUnassigned)) {
         String reason = "";
         Color color = Colors.redAccent;
         IconData icon = Icons.warning_amber_rounded;
 
         if (isOffline) {
-          reason = "Sensor Offline / Error";
+          reason = "Sensor Offline";
           color = Colors.blueGrey;
           icon = Icons.wifi_off_rounded;
-        } else if (isOverflowing) {
-          // UPDATED: Name changed to just "Overflow Detected"
-          reason = "Overflow Detected";
-          color = Colors.red;
-          icon = Icons.delete_forever;
-        } else {
-          reason = "Critical Fill Level (${v['FillLevel']}%)";
-          color = Colors.orange.shade800;
-          icon = Icons.priority_high;
+        } else if (isFull && isUnassigned) {
+          reason = "Unassigned & Full";
+          color = Colors.redAccent;
+          icon = Icons.warning_amber_rounded;
         }
 
         alerts.add({
@@ -113,7 +106,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
           'color': color,
           'icon': icon,
           'time': v['lastUpdate'] ?? 'Just now',
-          'unassigned': isUnassigned,
         });
       }
     });
@@ -315,19 +307,12 @@ class _AdminHomePageState extends State<AdminHomePage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(alert['reason'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                            Text(alert['reason'], style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: alert['color'])),
                             const SizedBox(height: 4),
                             Text("${alert['name']} • ${alert['area']}", style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
                           ],
                         ),
                       ),
-                      if (alert['unassigned'])
-                         Container(
-                          margin: const EdgeInsets.only(right: 16),
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(8)),
-                          child: Text("Needs Driver", style: TextStyle(color: Colors.orange.shade800, fontSize: 12, fontWeight: FontWeight.bold)),
-                        ),
                       Text(alert['time'], style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
                     ],
                   ),
@@ -366,10 +351,8 @@ class _AdminHomePageState extends State<AdminHomePage> {
         const SizedBox(height: 24),
         _buildStatusRow("Safe (Empty - 49%)", stats['Safe']!, total, const Color(0xFF4CAF50)),
         const SizedBox(height: 20),
-        // UPDATED: Label changed to 74%
         _buildStatusRow("Warning (50% - 74%)", stats['Warning']!, total, const Color(0xFFFF9800)),
         const SizedBox(height: 20),
-        // UPDATED: Label changed to 75%+
         _buildStatusRow("Critical (75%+)", stats['Critical']!, total, const Color(0xFFF44336)),
       ],
     );
