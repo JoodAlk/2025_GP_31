@@ -3,6 +3,7 @@ import 'package:firebase_database/firebase_database.dart';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'dart:math'; 
+import 'package:http/http.dart' as http;
 import 'web_frame.dart';
 
 class AdminDriverManagement extends StatefulWidget {
@@ -18,8 +19,9 @@ class _AdminDriverManagementState extends State<AdminDriverManagement> {
 
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController(); 
 
-  // --- HASHING & GENERATION ---
+  // --- HASHING & VALIDATION ---
   String hashPassword(String password) {
     final bytes = utf8.encode(password);
     return sha256.convert(bytes).toString();
@@ -27,6 +29,10 @@ class _AdminDriverManagementState extends State<AdminDriverManagement> {
 
   bool isPhoneValid(String phone) {
     return RegExp(r'^\+9665[0-9]{8}$').hasMatch(phone);
+  }
+
+  bool isEmailValid(String email) {
+    return RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email);
   }
 
   String generateSecurePassword() {
@@ -52,16 +58,47 @@ class _AdminDriverManagementState extends State<AdminDriverManagement> {
     return chars.join('');
   }
 
-  // --- MOCK SMS API ---
-  Future<void> _sendSMSToDriver(String phone, String id, String password) async {
-    String message = "Welcome to Baseer! Your Driver ID is: $id and your Password is: $password. Please log in to the app.";
-    print("📲 [SMS SENT TO $phone]: $message");
+  // --- REAL EMAILJS API ---
+  Future<void> _sendEmailToDriver(String email, String name, String id, String password) async {
+    // ⚠️ KEEP YOUR SERVICE ID AND PUBLIC KEY UPDATED HERE ⚠️
+    const serviceId = 'service_k6q1xr4'; // From your screenshot
+    const templateId = 'template_b3erohc'; // From your screenshot
+    const publicKey = 'YOUR_PUBLIC_KEY'; // Replace with your key from the Account tab
+
+    final url = Uri.parse('https://api.emailjs.com/api/v1.0/email/send');
+    
+    try {
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'service_id': serviceId,
+          'template_id': templateId,
+          'user_id': publicKey,
+          'template_params': {
+            'to_email': email,
+            'to_name': name,
+            'driver_id': id,
+            'driver_password': password,
+          }
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        print("📧 [EMAIL SENT SUCCESSFULLY TO $email]");
+      } else {
+        print("❌ [EMAIL FAILED]: ${response.body}");
+      }
+    } catch (e) {
+      print("❌ [EMAIL ERROR]: $e");
+    }
   }
 
   // --- ADD DRIVER DIALOG ---
   void _showAddDriverDialog() {
     _nameController.clear();
     _phoneController.clear();
+    _emailController.clear(); 
 
     showDialog(
       context: context,
@@ -71,9 +108,15 @@ class _AdminDriverManagementState extends State<AdminDriverManagement> {
           Future<void> createDriverAccount() async {
             final name = _nameController.text.trim();
             String phone = _phoneController.text.trim();
+            final email = _emailController.text.trim();
 
-            if (name.isEmpty || phone.isEmpty) {
+            if (name.isEmpty || phone.isEmpty || email.isEmpty) {
               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please fill all fields"), backgroundColor: Colors.red));
+              return;
+            }
+
+            if (!isEmailValid(email)) {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Enter a valid email address (e.g., name@domain.com)"), backgroundColor: Colors.red));
               return;
             }
 
@@ -103,6 +146,7 @@ class _AdminDriverManagementState extends State<AdminDriverManagement> {
               "DriverID": driverID,
               "Name": name,
               "Phone": phone,
+              "Email": email, 
               "EmployeePass": hashedPassword,
               "IsWorking": false, 
               "Language": "en",
@@ -111,7 +155,8 @@ class _AdminDriverManagementState extends State<AdminDriverManagement> {
               "AssignedArea": "None",
             });
 
-            await _sendSMSToDriver(phone, driverID, rawPassword);
+            // TRIGGER EMAIL API
+            await _sendEmailToDriver(email, name, driverID, rawPassword);
 
             if (!context.mounted) return;
             Navigator.pop(context); 
@@ -120,7 +165,7 @@ class _AdminDriverManagementState extends State<AdminDriverManagement> {
               context: context,
               builder: (context) => AlertDialog(
                 title: const Text("Success", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
-                content: const Text("Driver added successfully. An SMS containing the login credentials has been sent to the driver's phone."),
+                content: const Text("Driver added successfully. An email containing the login credentials has been sent to the driver."),
                 actions: [
                   TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
                 ],
@@ -137,9 +182,11 @@ class _AdminDriverManagementState extends State<AdminDriverManagement> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text("A secure ID and password will be automatically generated and sent via SMS to the driver.", style: TextStyle(color: Colors.grey, fontSize: 13)),
+                  const Text("A secure ID and password will be automatically generated and sent via email to the driver.", style: TextStyle(color: Colors.grey, fontSize: 13)),
                   const SizedBox(height: 20),
                   TextField(controller: _nameController, decoration: const InputDecoration(labelText: "Full Name", prefixIcon: Icon(Icons.person))),
+                  const SizedBox(height: 14),
+                  TextField(controller: _emailController, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: "Email Address", prefixIcon: Icon(Icons.email))),
                   const SizedBox(height: 14),
                   TextField(controller: _phoneController, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: "Phone Number (e.g., 5XXXXXXXX)", prefixIcon: Icon(Icons.phone))),
                 ],
@@ -150,7 +197,7 @@ class _AdminDriverManagementState extends State<AdminDriverManagement> {
               ElevatedButton(
                 onPressed: createDriverAccount,
                 style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF81C784)),
-                child: const Text("Generate & Send SMS", style: TextStyle(color: Colors.white)),
+                child: const Text("Generate & Send Email", style: TextStyle(color: Colors.white)),
               ),
             ],
           );
@@ -194,7 +241,6 @@ class _AdminDriverManagementState extends State<AdminDriverManagement> {
               String updatedPhone = editPhoneController.text.trim();
               if (updatedPhone.startsWith("5")) updatedPhone = "+966$updatedPhone";
 
-              // Update the specific driver's node in Firebase
               _dbRef.child(driverKey).update({
                 'Name': editNameController.text.trim(),
                 'Phone': updatedPhone,
@@ -282,19 +328,31 @@ class _AdminDriverManagementState extends State<AdminDriverManagement> {
                       }
                     }
 
-                    return SingleChildScrollView(
-                      child: DataTable(
-                        columnSpacing: 25,
-                        columns: const [
-                          DataColumn(label: Text("ID", style: TextStyle(fontWeight: FontWeight.bold))),
-                          DataColumn(label: Text("Name", style: TextStyle(fontWeight: FontWeight.bold))),
-                          DataColumn(label: Text("Phone", style: TextStyle(fontWeight: FontWeight.bold))),
-                          DataColumn(label: Text("Work Status", style: TextStyle(fontWeight: FontWeight.bold))),
-                          DataColumn(label: Text("Assigned Area", style: TextStyle(fontWeight: FontWeight.bold))),
-                          DataColumn(label: Text("Actions", style: TextStyle(fontWeight: FontWeight.bold))),
-                        ],
-                        rows: rows,
-                      ),
+                    // THE NEW LAYOUT BUILDER FIX
+                    return LayoutBuilder(
+                      builder: (context, constraints) {
+                        return SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                            child: SingleChildScrollView(
+                              child: DataTable(
+                                columnSpacing: 30, 
+                                columns: const [
+                                  DataColumn(label: Text("ID", style: TextStyle(fontWeight: FontWeight.bold))),
+                                  DataColumn(label: Text("Name", style: TextStyle(fontWeight: FontWeight.bold))),
+                                  DataColumn(label: Text("Email", style: TextStyle(fontWeight: FontWeight.bold))),
+                                  DataColumn(label: Text("Phone", style: TextStyle(fontWeight: FontWeight.bold))),
+                                  DataColumn(label: Text("Work Status", style: TextStyle(fontWeight: FontWeight.bold))),
+                                  DataColumn(label: Text("Assigned Area", style: TextStyle(fontWeight: FontWeight.bold))),
+                                  DataColumn(label: Text("Actions", style: TextStyle(fontWeight: FontWeight.bold))),
+                                ],
+                                rows: rows,
+                              ),
+                            ),
+                          ),
+                        );
+                      }
                     );
                   },
                 ),
@@ -310,6 +368,7 @@ class _AdminDriverManagementState extends State<AdminDriverManagement> {
     return DataRow(cells: [
       DataCell(Text(value['DriverID'] ?? 'N/A', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey))),
       DataCell(Text(value['Name'] ?? 'N/A')),
+      DataCell(Text(value['Email'] ?? 'N/A')), 
       DataCell(Text(value['Phone'] ?? 'N/A')),
       DataCell(
         Container(
@@ -331,7 +390,6 @@ class _AdminDriverManagementState extends State<AdminDriverManagement> {
           onChanged: (newVal) => _updateDriverArea(key, newVal!),
         ),
       ),
-      // --- UPDATED ACTIONS ROW (Edit & Delete) ---
       DataCell(
         Row(
           mainAxisSize: MainAxisSize.min,
