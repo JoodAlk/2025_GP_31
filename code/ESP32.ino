@@ -4,34 +4,42 @@
 #include "addons/RTDBHelper.h"
 #include <time.h>
 
-// ===== Wi-Fi =====
-#define WIFI_SSID     "Name"
-#define WIFI_PASSWORD "Password"
+// Wi-Fi
+#define WIFI_SSID     "HUAWEI-B525-7260"
+#define WIFI_PASSWORD "58658593"
 
-// ===== Firebase (RTDB) =====
+// Firebase
 #define API_KEY      "AIzaSyBgzhlooyfDirhNsYww63URZfMhhl2DDhE"
 #define DATABASE_URL "https://baseer-40cf2-default-rtdb.asia-southeast1.firebasedatabase.app/"
 
-// ===== Project config =====
-#define BIN_ID         "BIN-001"
-#define SEND_INTERVAL  3000UL   // 3 seconds
+// Bin info
+#define BIN_ID "1"
+#define BIN_LABEL "Bin-1"
+#define AREA_ID "Riyadh-03"
+#define BIN_NAME "1"
 
-// ===== Ultrasonic Pins =====
+// Send interval
+#define SEND_INTERVAL 3000UL
+
+// Ultrasonic pins
 #define TRIG_PIN 12
 #define ECHO_PIN 13
 
-// ===== Calibration (Updated) =====
-// Empty distance = 21 cm
-// Full distance ≈ 4 cm (your final measured value)
+// MQ-2 digital pin
+#define MQ2_DO_PIN 14
+
+// Bin calibration
 const float EMPTY_DISTANCE_CM = 21.0f;
 const float FULL_DISTANCE_CM  = 4.0f;
+const int CAPACITY_CM = 400;
 
-// Capacity expressed in cm (usable height)
-const int CAPACITY_CM = 21;
+// Location
+const float LOCATION_LATITUDE = 24.7136;
+const float LOCATION_LONGITUDE = 46.6753;
 
-// Riyadh Time (UTC+3)
-const long GMT_OFFSET_SEC      = 3 * 3600;
-const int  DAYLIGHT_OFFSET_SEC = 0;
+// Riyadh time UTC+3
+const long GMT_OFFSET_SEC = 3 * 3600;
+const int DAYLIGHT_OFFSET_SEC = 0;
 
 FirebaseData fbdo;
 FirebaseAuth auth;
@@ -40,11 +48,10 @@ FirebaseConfig config;
 unsigned long lastSend = 0;
 bool signupOK = false;
 
-// ========= Utility Functions =========
-
 bool ensureWiFi() {
   if (WiFi.status() == WL_CONNECTED) return true;
 
+  Serial.println("WiFi disconnected. Reconnecting...");
   WiFi.disconnect(true);
   delay(100);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
@@ -52,35 +59,58 @@ bool ensureWiFi() {
   unsigned long start = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - start < 5000) {
     delay(100);
+    Serial.print(".");
   }
 
+  Serial.println();
   return WiFi.status() == WL_CONNECTED;
 }
 
 bool ensureFirebaseSession() {
   if (!signupOK) {
+    Serial.println("Signing in to Firebase...");
+
     if (Firebase.signUp(&config, &auth, "", "")) {
       signupOK = true;
+      Serial.println("Firebase signup OK.");
       return true;
     }
+
+    Serial.println("Firebase signup failed.");
+    Serial.println(config.signer.signupError.message.c_str());
     return false;
   }
+
   return true;
 }
 
 bool sendToFirebase(FirebaseJson &j) {
   String path = String("/Baseer/bins/") + BIN_ID;
 
-  if (!ensureWiFi()) return false;
-  if (!ensureFirebaseSession()) return false;
+  if (!ensureWiFi()) {
+    Serial.println("WiFi failed. Upload skipped.");
+    return false;
+  }
+
+  if (!ensureFirebaseSession()) {
+    Serial.println("Firebase session failed. Upload skipped.");
+    return false;
+  }
 
   if (Firebase.ready()) {
-    return Firebase.RTDB.updateNode(&fbdo, path.c_str(), &j);
+    bool ok = Firebase.RTDB.updateNode(&fbdo, path.c_str(), &j);
+
+    if (!ok) {
+      Serial.print("Firebase error: ");
+      Serial.println(fbdo.errorReason());
+    }
+
+    return ok;
   }
+
+  Serial.println("Firebase not ready.");
   return false;
 }
-
-// ===== Ultrasonic Distance =====
 
 int readDistanceCm() {
   digitalWrite(TRIG_PIN, LOW);
@@ -97,16 +127,14 @@ int readDistanceCm() {
   return (int)(duration * 0.034f / 2.0f);
 }
 
-// ===== Linear fill-level mapping =====
-
 int distanceToFillLevel(float distanceCm) {
   if (distanceCm < 0) return 0;
 
   if (distanceCm >= EMPTY_DISTANCE_CM) return 0;
-  if (distanceCm <= FULL_DISTANCE_CM)  return 100;
+  if (distanceCm <= FULL_DISTANCE_CM) return 100;
 
-  float span    = EMPTY_DISTANCE_CM - FULL_DISTANCE_CM;   // 17 cm
-  float filled  = EMPTY_DISTANCE_CM - distanceCm;
+  float span = EMPTY_DISTANCE_CM - FULL_DISTANCE_CM;
+  float filled = EMPTY_DISTANCE_CM - distanceCm;
   float percent = (filled / span) * 100.0f;
 
   if (percent < 0) percent = 0;
@@ -115,10 +143,9 @@ int distanceToFillLevel(float distanceCm) {
   return (int)roundf(percent);
 }
 
-// ===== Timestamp Formatting =====
-
 String ordinalSuffix(int d) {
   if (d % 100 >= 11 && d % 100 <= 13) return "th";
+
   switch (d % 10) {
     case 1: return "st";
     case 2: return "nd";
@@ -127,32 +154,57 @@ String ordinalSuffix(int d) {
   }
 }
 
-// Same format for LastEmptied and lastUpdate
 String getRiyadhDateTimeString() {
   struct tm timeinfo;
-  if (!getLocalTime(&timeinfo)) return "Unknown";
+
+  if (!getLocalTime(&timeinfo)) {
+    return "Unknown";
+  }
 
   int day = timeinfo.tm_mday;
   String suffix = ordinalSuffix(day);
 
   char monthYear[32];
-  strftime(monthYear, sizeof(monthYear), "%B %Y", &timeinfo); // "November 2025"
+  strftime(monthYear, sizeof(monthYear), "%B %Y", &timeinfo);
 
   char timePart[16];
-  strftime(timePart, sizeof(timePart), "%H:%M:%S", &timeinfo); // "03:41:22"
+  strftime(timePart, sizeof(timePart), "%H:%M:%S", &timeinfo);
 
   return String(day) + suffix + " " + monthYear + " at " + timePart;
 }
 
-// ====================== SETUP =========================
-
 void setup() {
   Serial.begin(115200);
+  delay(1000);
+
+  Serial.println();
+  Serial.println("Starting Baseer ESP32...");
 
   pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
 
+  pinMode(MQ2_DO_PIN, INPUT);
+
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+  Serial.print("Connecting to WiFi");
+  unsigned long start = millis();
+
+  while (WiFi.status() != WL_CONNECTED && millis() - start < 10000) {
+    delay(300);
+    Serial.print(".");
+  }
+
+  Serial.println();
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("WiFi connected.");
+    Serial.print("IP: ");
+    Serial.println(WiFi.localIP());
+  } else {
+    Serial.println("WiFi not connected yet. Will retry in loop.");
+  }
+
   configTime(GMT_OFFSET_SEC, DAYLIGHT_OFFSET_SEC,
              "pool.ntp.org", "time.nist.gov");
 
@@ -161,30 +213,56 @@ void setup() {
 
   Firebase.begin(&config, &auth);
   Firebase.reconnectWiFi(true);
-}
 
-// ======================= LOOP =========================
+  Serial.println("Setup complete.");
+}
 
 void loop() {
   const unsigned long now = millis();
+
   if (now - lastSend < SEND_INTERVAL) return;
   lastSend = now;
 
-  static int prevFill      = -1; // for LastEmptied transition
-  static int lastValidFill = 0;  // last good reading for NoData
+  static int prevFill = -1;
+  static int lastValidFill = 0;
 
-  int distance = readDistanceCm();
   FirebaseJson j;
 
-  // Capacity always sent
+  // Fixed bin info
+  j.set("AreaId", AREA_ID);
+  j.set("BinID", BIN_LABEL);
   j.set("Capacity", CAPACITY_CM);
+  j.set("IsAssigned", false);
+  j.set("LocationLatitude", LOCATION_LATITUDE);
+  j.set("LocationLongitude", LOCATION_LONGITUDE);
+  j.set("Name", BIN_NAME);
 
-  // Current human-readable timestamp (for lastUpdate and maybe LastEmptied)
+  // Fire sensor reading
+  int mq2Value = digitalRead(MQ2_DO_PIN);
+
+  // LOW/0 = fire/gas detected
+  // HIGH/1 = safe
+  bool fireDetected = (mq2Value == LOW);
+
+  String fireStatus = fireDetected ? "Detected" : "Safe";
+
+  Serial.println("-----------------------------");
+  Serial.print("MQ2 Digital Value: ");
+  Serial.println(mq2Value);
+  Serial.print("FireDetected: ");
+  Serial.println(fireDetected ? "true" : "false");
+  Serial.print("FireStatus: ");
+  Serial.println(fireStatus);
+
+  j.set("FireDetected", fireDetected);
+  j.set("FireStatus", fireStatus);
+
+  // Ultrasonic reading
+  int distance = readDistanceCm();
   String nowStr = getRiyadhDateTimeString();
 
   if (distance < 0) {
-    // ===== NO DATA CASE =====
-    Serial.println("Sensor read failed (no echo) -> NoData");
+    Serial.println("Ultrasonic read failed: No echo.");
 
     int fill = lastValidFill;
     int free = 100 - fill;
@@ -195,26 +273,31 @@ void loop() {
     j.set("IsOverflowing", isOverflowing);
     j.set("Status", "NoData");
 
-    // Do NOT touch LastEmptied or prevFill here
-
   } else {
-    // ===== NORMAL CASE =====
     int fill = distanceToFillLevel((float)distance);
     int free = 100 - fill;
     bool isOverflowing = (fill >= 95);
 
-    Serial.printf("Distance=%d cm, FillLevel=%d%%, FreeSpace=%d%%\n",
-                  distance, fill, free);
+    Serial.print("Distance: ");
+    Serial.print(distance);
+    Serial.println(" cm");
 
+    Serial.print("FillLevel: ");
+    Serial.print(fill);
+    Serial.println("%");
+
+    Serial.print("FreeSpace: ");
+    Serial.print(free);
+    Serial.println("%");
+
+    j.set("DistanceCm", distance);
     j.set("FillLevel", fill);
     j.set("FreeSpace", free);
     j.set("IsOverflowing", isOverflowing);
     j.set("Status", "OK");
 
-    // Update last valid reading
     lastValidFill = fill;
 
-    // LastEmptied: when bin goes from non-empty to empty (0 %)
     bool justEmptied = (prevFill > 0 && fill == 0);
 
     if (justEmptied) {
@@ -225,10 +308,11 @@ void loop() {
     prevFill = fill;
   }
 
-  // lastUpdate = current timestamp string
-  j.set("lastUpdate", nowStr);
+  j.set("LastUpdate", nowStr);
 
-  if (!sendToFirebase(j)) {
+  if (sendToFirebase(j)) {
+    Serial.println("Upload successful.");
+  } else {
     Serial.println("Upload failed.");
   }
 }
