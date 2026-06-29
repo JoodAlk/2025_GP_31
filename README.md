@@ -174,10 +174,4 @@ https://github.com/JoodAlk/2025_GP_31
 
 ---
 
-## GitHub Repository Link
 
-The full project code is available at:
-
-```text
-https://github.com/JoodAlk/2025_GP_31
-```
